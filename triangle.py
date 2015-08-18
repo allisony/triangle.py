@@ -31,7 +31,7 @@ import numpy as np
 import matplotlib.pyplot as pl
 from matplotlib.ticker import MaxNLocator
 from matplotlib.colors import LinearSegmentedColormap, colorConverter
-from matplotlib.ticker import ScalarFormatter
+from matplotlib.ticker import ScalarFormatter, LogFormatter, NullFormatter
 
 try:
     from scipy.ndimage import gaussian_filter
@@ -51,7 +51,6 @@ def corner(xs, bins=20, range=None, weights=None, color="k",
     Make a *sick* corner plot showing the projections of a data set in a
     multi-dimensional space. kwargs are passed to hist2d() or used for
     `matplotlib` styling.
-
     Parameters
     ----------
     xs : array_like (nsamples, ndim)
@@ -59,72 +58,54 @@ def corner(xs, bins=20, range=None, weights=None, color="k",
         array this results in a simple histogram. For a 2-D array, the zeroth
         axis is the list of samples and the next axis are the dimensions of
         the space.
-
     weights : array_like (nsamples,)
         The weight of each sample. If `None` (default), samples are given
         equal weight.
-
     labels : iterable (ndim,) (optional)
         A list of names for the dimensions. If a ``xs`` is a
         ``pandas.DataFrame``, labels will default to column names.
-
     show_titles : bool (optional)
         Displays a title above each 1-D histogram showing the 0.5 quantile
         with the upper and lower errors supplied by the quantiles argument.
-
     title_fmt : string (optional)
         The format string for the quantiles given in titles.
         (default: `.2f`)
-
     title_args : dict (optional)
         Any extra keyword arguments to send to the `add_title` command.
-
     range : iterable (ndim,) (optional)
         A list where each element is either a length 2 tuple containing
         lower and upper bounds or a float in range (0., 1.)
         giving the fraction of samples to include in bounds, e.g.,
         [(0.,10.), (1.,5), 0.999, etc.].
         If a fraction, the bounds are chosen to be equal-tailed.
-
     truths : iterable (ndim,) (optional)
         A list of reference values to indicate on the plots.  Individual
         values can be omitted by using ``None``.
-
     truth_color : str (optional)
         A ``matplotlib`` style color for the ``truths`` makers.
-
     scale_hist : bool (optional)
         Should the 1-D histograms be scaled in such a way that the zero line
         is visible?
-
     quantiles : iterable (optional)
         A list of fractional quantiles to show on the 1-D histograms as
         vertical dashed lines.
-
     verbose : bool (optional)
         If true, print the values of the computed quantiles.
-
     plot_contours : bool (optional)
         Draw contours for dense regions of the plot.
-
     use_math_text : bool (optional)
         If true then axis tick labels for very large or small exponents will be
         displayed as powers of 10 rather than using `e`.
-
     no_fill_contours : bool (optional)
         Add no filling at all to the contours (unlike setting
         ``fill_contours=False``, which still adds a white fill at the densest
         points).
-
     plot_datapoints : bool (optional)
         Draw the individual data points.
-
     max_n_ticks: int (optional)
         maximum number of ticks to try to use
-
     fig : matplotlib.Figure (optional)
         Overplot onto the provided figure object.
-
     """
     if quantiles is None:
         quantiles = []
@@ -199,9 +180,9 @@ def corner(xs, bins=20, range=None, weights=None, color="k",
     # Some magic numbers for pretty axis layout.
     K = len(xs)
     factor = 2.0           # size of one side of one panel
-    lbdim = 0.5 * factor   # size of left/bottom margin
-    trdim = 0.2 * factor   # size of top/right margin
-    whspace = 0.05         # w/hspace size
+    lbdim = 0.9 * factor   # size of left/bottom margin
+    trdim = 0.6 * factor   # size of top/right margin
+    whspace = 0         # w/hspace size
     plotdim = factor * K + factor * (K - 1.) * whspace
     dim = lbdim + plotdim + trdim
 
@@ -270,17 +251,30 @@ def corner(xs, bins=20, range=None, weights=None, color="k",
             q_16, q_50, q_84 = quantile(x, [0.16, 0.5, 0.84], weights=weights)
             q_m, q_p = q_50-q_16, q_84-q_50
 
-            # Format the quantile display.
-            fmt = "{{0:{0}}}".format(title_fmt).format
-            title = r"${{{0}}}_{{-{1}}}^{{+{2}}}$"
-            title = title.format(fmt(q_50), fmt(q_m), fmt(q_p))
 
+        # Format the quantile display.
+            if q_50 < 1e-4:
+              q_50_str = "{0:.3g}".format(q_50)
+              arg,exp = q_50_str.split('e')
+              if exp == '-05':
+                exp = '-5'
+              q_50 = float(arg)
+              q_p = round((q_p / 10**float(exp)),2)
+              q_m = round((q_m / 10**float(exp)),2)
+              #fmt = "{{0:{0}}}".format(title_fmt).format
+              title = r"$(" + str(q_50) + "^{+" + str(q_50 - q_p) + "}_{-" + str(q_50-q_m) + r"})\times10^{" + exp + "}$"
+              #title = title.format(fmt(q_50), fmt(q_m), fmt(q_p))
+            else:
+              fmt = "{{0:{0}}}".format(title_fmt).format
+              title = r"${{{0}}}_{{-{1}}}^{{+{2}}}$"
+              title = title.format(fmt(q_50), fmt(q_m), fmt(q_p))
             # Add in the column name if it's given.
             if labels is not None:
                 title = "{0} = {1}".format(labels[i], title)
 
             # Add the title to the axis.
-            ax.set_title(title, **title_kwargs)
+            ax.set_title(title, fontsize=8., **title_kwargs)
+
 
         # Set up the axes.
         ax.set_xlim(range[i])
@@ -346,7 +340,7 @@ def corner(xs, bins=20, range=None, weights=None, color="k",
                 [l.set_rotation(45) for l in ax.get_xticklabels()]
                 if labels is not None:
                     ax.set_xlabel(labels[j], **label_kwargs)
-                    ax.xaxis.set_label_coords(0.5, -0.3)
+                    ax.xaxis.set_label_coords(0.5, -0.5)
 
                 # use MathText for axes ticks
                 ax.xaxis.set_major_formatter(
@@ -358,7 +352,7 @@ def corner(xs, bins=20, range=None, weights=None, color="k",
                 [l.set_rotation(45) for l in ax.get_yticklabels()]
                 if labels is not None:
                     ax.set_ylabel(labels[i], **label_kwargs)
-                    ax.yaxis.set_label_coords(-0.3, 0.5)
+                    ax.yaxis.set_label_coords(-0.5, 0.5)
 
                 # use MathText for axes ticks
                 ax.yaxis.set_major_formatter(
@@ -370,11 +364,9 @@ def corner(xs, bins=20, range=None, weights=None, color="k",
 def quantile(x, q, weights=None):
     """
     Like numpy.percentile, but:
-
     * Values of q are quantiles [0., 1.] rather than percentiles [0., 100.]
     * scalar q not supported (q must be iterable)
     * optional weights on x
-
     """
     if weights is None:
         return np.percentile(x, [100. * qi for qi in q])
@@ -393,7 +385,6 @@ def hist2d(x, y, bins=20, range=None, weights=None, levels=None, smooth=None,
            **kwargs):
     """
     Plot a 2-D histogram of samples.
-
     """
     if ax is None:
         ax = pl.gca()
